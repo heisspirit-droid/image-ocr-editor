@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>고성능 OCR & 인페인팅 에디터 (Rotate & Align 지원)</title>
+  
+  <!-- Google Fonts CDN Integration (12 Fonts) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Courier+Prime&family=Do+Hyeon&family=Gowun+Batang&family=Inter:wght@400;700&family=Montserrat:wght@400;700&family=Nanum+Gothic:wght@400;700&family=Nanum+Pen+Script&family=Noto+Sans+KR:wght@400;700&family=Oswald:wght@500;700&family=Pacifico&family=Playfair+Display:wght@600;800&display=swap" rel="stylesheet">
+  
+  <!-- Tesseract.js OCR CDN (v5) -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+
+  <style>
+    :root {
+      --bg-main: #0f172a;
+      --bg-panel: #1e293b;
+      --bg-card: #334155;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #10b981;
+      --text-main: #f8fafc;
+      --text-sub: #94a3b8;
+      --border: #475569;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Noto Sans KR', sans-serif;
+      background-color: var(--bg-main);
+      color: var(--text-main);
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    /* Header Bar */
+    header {
+      height: 60px;
+      background-color: var(--bg-panel);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 20px;
+      z-index: 10;
+    }
+    .header-title { font-size: 1.05rem; font-weight: 700; display: flex; align-items: center; gap: 8px; }
+    .header-controls { display: flex; gap: 8px; align-items: center; }
+
+    /* Button Styles */
+    .btn {
+      background-color: var(--primary);
+      color: white;
+      border: none;
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-weight: 600;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.85rem;
+      transition: all 0.2s;
+    }
+    .btn:hover { background-color: var(--primary-hover); }
+    .btn-accent { background-color: var(--accent); }
+    .btn-accent:hover { background-color: #059669; }
+    .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text-main); }
+    .btn-outline:hover { background: var(--bg-card); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    #imageLoader { display: none; }
+
+    /* Split Workspace */
+    .workspace {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    .canvas-container {
+      flex: 1;
+      position: relative;
+      overflow: hidden;
+      background: #020617;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .canvas-wrapper {
+      position: relative;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    canvas {
+      display: block;
+      cursor: crosshair;
+      touch-action: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    .panel {
+      width: 380px;
+      background-color: var(--bg-panel);
+      border-left: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding: 16px;
+      overflow-y: auto;
+    }
+
+    .panel-section {
+      background-color: var(--bg-card);
+      padding: 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+    }
+    .section-title {
+      font-size: 0.85rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #cbd5e1;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    @media (max-width: 768px) {
+      .workspace { flex-direction: column; }
+      .canvas-container { height: 55vh; }
+      .panel { width: 100%; height: 45vh; border-left: none; border-top: 1px solid var(--border); }
+    }
+
+    .form-group { margin-bottom: 10px; }
+    label { display: block; font-size: 0.78rem; color: var(--text-sub); margin-bottom: 4px; }
+    input[type="text"], input[type="number"], textarea, select {
+      width: 100%;
+      background: var(--bg-main);
+      border: 1px solid var(--border);
+      color: white;
+      padding: 8px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+    }
+    textarea { resize: vertical; min-height: 60px; }
+    .inline-inputs { display: flex; gap: 8px; align-items: center; }
+
+    .ocr-status { font-size: 0.75rem; color: #38bdf8; display: none; align-items: center; gap: 4px; }
+    .layer-list { display: flex; flex-direction: column; gap: 6px; max-height: 140px; overflow-y: auto; }
+    .layer-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--bg-main); padding: 6px 10px; border-radius: 4px;
+      border: 1px solid var(--border); cursor: pointer; font-size: 0.8rem;
+    }
+    .layer-item.active { border-color: var(--primary); background: #1e3a8a; }
+
+    .zoom-indicator {
+      position: absolute;
+      bottom: 20px;
+      left: 20px;
+      background: rgba(15, 23, 42, 0.8);
+      border: 1px solid var(--border);
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="header-title">
+      ⚡ 고성능 OCR & 인페인팅 에디터 (Rotate & Align)
+    </div>
+    <div class="header-controls">
+      <button class="btn btn-outline" onclick="document.getElementById('imageLoader').click()">📂 이미지 로드</button>
+      <input type="file" id="imageLoader" accept="image/*">
+      <button class="btn btn-outline" id="undoBtn" disabled title="Ctrl+Z">↩️ Undo</button>
+      <button class="btn btn-outline" id="redoBtn" disabled title="Ctrl+Y">↪️ Redo</button>
+      <button class="btn btn-outline" id="resetZoomBtn" title="Ctrl+0">🔍 100% Fit</button>
+      <button class="btn btn-outline" id="togglePreviewBtn" disabled>👁️ 비교</button>
+      <button class="btn btn-accent" id="downloadBtn" disabled>💾 저장</button>
+    </div>
+  </header>
+
+  <div class="workspace">
+    <div class="canvas-container">
+      <div class="canvas-wrapper">
+        <canvas id="mainCanvas"></canvas>
+      </div>
+      <div class="zoom-indicator" id="zoomIndicator">Zoom: 100% | Pan: Space+Drag</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-section">
+        <div class="section-title">
+          <span>1. 고정밀 OCR & 텍스트 편집</span>
+          <span id="ocrStatus" class="ocr-status">⏳ OCR 준비 중...</span>
+        </div>
+        <div class="form-group">
+          <label>수정 텍스트 내용</label>
+          <textarea id="textInput" placeholder="캔버스 상에서 수정할 영역을 드래그하세요..."></textarea>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">2. 폰트 & 스타일 & 정렬/회전</div>
+        <div class="form-group">
+          <label>글꼴 (Google Fonts 12종)</label>
+          <select id="fontFamily">
+            <optgroup label="한국어 폰트">
+              <option value="Noto Sans KR" selected>Noto Sans KR (기본 고딕)</option>
+              <option value="Gowun Batang">고운바탕 (명조체)</option>
+              <option value="Black Han Sans">Black Han Sans (제목용)</option>
+              <option value="Do Hyeon">도현체 (라운드 제목)</option>
+              <option value="Nanum Gothic">나눔고딕</option>
+              <option value="Nanum Pen Script">나눔손글씨 (스크립트)</option>
+            </optgroup>
+            <optgroup label="영어 폰트">
+              <option value="Inter">Inter (Sans-Serif)</option>
+              <option value="Playfair Display">Playfair Display (Serif)</option>
+              <option value="Oswald">Oswald (Condensed Title)</option>
+              <option value="Pacifico">Pacifico (Retro Script)</option>
+              <option value="Montserrat">Montserrat (Modern)</option>
+              <option value="Courier Prime">Courier Prime (Monospace)</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="form-group inline-inputs">
+          <div style="flex:1;">
+            <label>크기(px)</label>
+            <input type="number" id="fontSize" value="24" min="8" max="300">
+          </div>
+          <div style="flex:1;">
+            <label>글자 색상</label>
+            <input type="color" id="textColor" value="#ffffff" style="height:35px; cursor:pointer;">
+          </div>
+          <div style="margin-top: 15px;">
+            <label><input type="checkbox" id="isBold"> Bold</label>
+          </div>
+        </div>
+
+        <!-- 📌 정렬 및 회전 조절 컨트롤 추가 -->
+        <div class="form-group inline-inputs">
+          <div style="flex:1;">
+            <label>텍스트 정렬</label>
+            <select id="textAlign">
+              <option value="left" selected>왼쪽 정렬</option>
+              <option value="center">중앙 정렬</option>
+              <option value="right">오른쪽 정렬</option>
+            </select>
+          </div>
+          <div style="flex:1;">
+            <label>회전 각도(°)</label>
+            <input type="number" id="textRotation" value="0" min="0" max="360">
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">3. 배경 복원 모드</div>
+        <div class="form-group">
+          <select id="bgFillMode">
+            <option value="inpaint" selected>✨ 그라데이션 자동 복원 (Inpaint)</option>
+            <option value="solid">🎨 단색 채우기 (Solid Fill)</option>
+          </select>
+        </div>
+        <div class="form-group inline-inputs" id="solidColorGroup" style="display:none;">
+          <label>대체 배경색:</label>
+          <input type="color" id="bgColorPicker" value="#000000" style="height:35px; cursor:pointer;">
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="section-title">
+          <span>4. 레이어 목록</span>
+          <button class="btn btn-outline btn-sm" id="applyLayerBtn" disabled>✅ 레이어 확정</button>
+        </div>
+        <div class="layer-list" id="layerList">
+          <div style="font-size:0.78rem; color:var(--text-sub); text-align:center; padding:10px;">
+            수정된 레이어가 없습니다.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let originalImage = null;
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Tesseract Worker Singleton
+    let globalOcrWorker = null;
+    let isWorkerInitializing = false;
+
+    // Zoom & Pan State
+    let zoomScale = 1.0;
+    let panX = 0;
+    let panY = 0;
+    let isPanning = false;
+    let panStartX = 0;
+    let panStartY = 0;
+    let isSpacePressed = false;
+
+    // Selection & Drag/Resize State
+    let isDraggingSelection = false;
+    let isFixed = false;
+    let startX = 0, startY = 0;
+    let currentSelection = null;
+
+    let interactionMode = null; // 'move' | 'resize-...' | 'rotate'
+    let dragOffsetX = 0, dragOffsetY = 0;
+    let initialLayerState = null;
+
+    // Multi-Layer & History
+    let layers = [];
+    let activeLayerId = null;
+    let undoStack = [];
+    let redoStack = [];
+
+    // DOM Elements
+    const imageLoader = document.getElementById('imageLoader');
+    const textInput = document.getElementById('textInput');
+    const fontFamily = document.getElementById('fontFamily');
+    const fontSize = document.getElementById('fontSize');
+    const textColor = document.getElementById('textColor');
+    const isBold = document.getElementById('isBold');
+    const textAlign = document.getElementById('textAlign');
+    const textRotation = document.getElementById('textRotation');
+    const bgFillMode = document.getElementById('bgFillMode');
+    const solidColorGroup = document.getElementById('solidColorGroup');
+    const bgColorPicker = document.getElementById('bgColorPicker');
+    const ocrStatus = document.getElementById('ocrStatus');
+    const applyLayerBtn = document.getElementById('applyLayerBtn');
+    const downloadBtn = document.getElementById('downloadBtn');
+    const togglePreviewBtn = document.getElementById('togglePreviewBtn');
+    const undoBtn = document.getElementById('undoBtn');
+    const redoBtn = document.getElementById('redoBtn');
+    const resetZoomBtn = document.getElementById('resetZoomBtn');
+    const zoomIndicator = document.getElementById('zoomIndicator');
+    const layerList = document.getElementById('layerList');
+
+    // --- Tesseract Worker Warm-up ---
+    async function initOCRWorker() {
+      if (globalOcrWorker || isWorkerInitializing) return;
+      isWorkerInitializing = true;
+      ocrStatus.style.display = 'inline-flex';
+      ocrStatus.textContent = '⚡ 엔진 웜업 중...';
+
+      try {
+        globalOcrWorker = await Tesseract.createWorker('kor+eng', 1, {
+          langPath: 'https://tessdata.projectnaptha.com/4.0.0_fast'
+        });
+        await globalOcrWorker.setParameters({
+          tessedit_pageseg_mode: Tesseract.PSM.SINGLE_BLOCK,
+          preserve_interword_spaces: '1'
+        });
+      } catch (err) {
+        console.error('Worker Warm-up Error:', err);
+      } finally {
+        isWorkerInitializing = false;
+        ocrStatus.style.display = 'none';
+      }
+    }
+
+    // --- History Control ---
+    function saveHistory() {
+      undoStack.push(JSON.parse(JSON.stringify(layers)));
+      redoStack = [];
+      updateHistoryButtons();
+    }
+
+    function updateHistoryButtons() {
+      undoBtn.disabled = undoStack.length === 0;
+      redoBtn.disabled = redoStack.length === 0;
+    }
+
+    function undo() {
+      if (undoStack.length === 0) return;
+      redoStack.push(JSON.parse(JSON.stringify(layers)));
+      layers = undoStack.pop();
+      activeLayerId = null; currentSelection = null; isFixed = false;
+      updateHistoryButtons(); updateLayerListUI(); renderAll();
+    }
+
+    function redo() {
+      if (redoStack.length === 0) return;
+      undoStack.push(JSON.parse(JSON.stringify(layers)));
+      layers = redoStack.pop();
+      activeLayerId = null; currentSelection = null; isFixed = false;
+      updateHistoryButtons(); updateLayerListUI(); renderAll();
+    }
+
+    undoBtn.addEventListener('click', undo);
+    redoBtn.addEventListener('click', redo);
+
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && !isSpacePressed && document.activeElement.tagName !== 'TEXTAREA' && document.activeElement.tagName !== 'INPUT') {
+        isSpacePressed = true;
+        canvas.style.cursor = 'grab';
+        e.preventDefault();
+      }
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'z' || e.key === 'Z') { e.shiftKey ? redo() : undo(); e.preventDefault(); }
+        else if (e.key === 'y' || e.key === 'Y') { redo(); e.preventDefault(); }
+        else if (e.key === '0') { resetZoom(); e.preventDefault(); }
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      if (e.code === 'Space') {
+        isSpacePressed = false;
+        canvas.style.cursor = 'crosshair';
+      }
+    });
+
+    // --- Image Load ---
+    imageLoader.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      initOCRWorker();
+
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          originalImage = img;
+          canvas.width = img.width; canvas.height = img.height;
+          layers = []; undoStack = []; redoStack = [];
+          activeLayerId = null; currentSelection = null; isFixed = false;
+          resetZoom();
+          updateHistoryButtons(); renderAll();
+          downloadBtn.disabled = false; togglePreviewBtn.disabled = false;
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    });
+
+    // --- Zoom & Pan ---
+    function resetZoom() {
+      zoomScale = 1.0; panX = 0; panY = 0;
+      updateZoomIndicator(); renderAll();
+    }
+
+    resetZoomBtn.addEventListener('click', resetZoom);
+
+    function updateZoomIndicator() {
+      zoomIndicator.textContent = `Zoom: ${Math.round(zoomScale * 100)}% | Pan: Space+Drag`;
+    }
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const zoomFactor = e.deltaY < 0 ? 1.1 : 0.9;
+      const newScale = Math.min(Math.max(0.2, zoomScale * zoomFactor), 5.0);
+
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+
+      panX = mouseX - (mouseX - panX) * (newScale / zoomScale);
+      panY = mouseY - (mouseY - panY) * (newScale / zoomScale);
+      zoomScale = newScale;
+
+      updateZoomIndicator(); renderAll();
+    }, { passive: false });
+
+    function getCanvasCoords(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.clientX - rect.left;
+      const clientY = e.clientY - rect.top;
+
+      const x = (clientX - panX) / zoomScale * (canvas.width / rect.width);
+      const y = (clientY - panY) / zoomScale * (canvas.height / rect.height);
+      return { x, y };
+    }
+
+    // 📌 회전각(Rotation) 고려 리사이즈/회전 핸들 계산
+    function getResizeHandles(layer, size = 10) {
+      const half = size / 2;
+      return {
+        tl: { x: layer.x - half, y: layer.y - half },
+        tr: { x: layer.x + layer.w - half, y: layer.y - half },
+        bl: { x: layer.x - half, y: layer.y + layer.h - half },
+        br: { x: layer.x + layer.w - half, y: layer.y + layer.h - half },
+        rot: { x: layer.x + layer.w / 2 - half, y: layer.y - 25 - half } // 회전 상단 핸들
+      };
+    }
+
+    function getHitHandle(clickX, clickY, layer, pointerType) {
+      const hitSize = (pointerType === 'pen') ? 12 : (pointerType === 'touch' ? 26 : 16);
+      const visualSize = 10;
+      
+      // 회전 변환 적용 좌표 계산
+      const cx = layer.x + layer.w / 2;
+      const cy = layer.y + layer.h / 2;
+      const rad = -(layer.rotation || 0) * (Math.PI / 180);
+
+      // 점(clickX, clickY)을 레이어 중심으로 역회전시켜 판단
+      const unrotX = Math.cos(rad) * (clickX - cx) - Math.sin(rad) * (clickY - cy) + cx;
+      const unrotY = Math.sin(rad) * (clickX - cx) + Math.cos(rad) * (clickY - cy) + cy;
+
+      const handles = getResizeHandles(layer, visualSize);
+      for (const [type, h] of Object.entries(handles)) {
+        if (unrotX >= h.x - (hitSize - visualSize)/2 &&
+            unrotX <= h.x + visualSize + (hitSize - visualSize)/2 &&
+            unrotY >= h.y - (hitSize - visualSize)/2 &&
+            unrotY <= h.y + visualSize + (hitSize - visualSize)/2) {
+          return type;
+        }
+      }
+      return null;
+    }
+
+    // --- Pointer Events ---
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!originalImage || !e.isPrimary) return;
+
+      if (isSpacePressed || e.button === 1) {
+        isPanning = true;
+        panStartX = e.clientX - panX;
+        panStartY = e.clientY - panY;
+        canvas.style.cursor = 'grabbing';
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+
+      canvas.setPointerCapture(e.pointerId);
+      const { x: clickX, y: clickY } = getCanvasCoords(e);
+      const pType = e.pointerType;
+
+      if (activeLayerId) {
+        const layer = layers.find(l => l.id === activeLayerId);
+        if (layer) {
+          const handleType = getHitHandle(clickX, clickY, layer, pType);
+          if (handleType === 'rot') {
+            interactionMode = 'rotate';
+            initialLayerState = { ...layer, clickX, clickY };
+            return;
+          } else if (handleType) {
+            interactionMode = `resize-${handleType}`;
+            initialLayerState = { ...layer, clickX, clickY };
+            return;
+          } else {
+            // 레이어 내부 클릭 체크 (회전 역연산)
+            const cx = layer.x + layer.w / 2;
+            const cy = layer.y + layer.h / 2;
+            const rad = -(layer.rotation || 0) * (Math.PI / 180);
+            const unrotX = Math.cos(rad) * (clickX - cx) - Math.sin(rad) * (clickY - cy) + cx;
+            const unrotY = Math.sin(rad) * (clickX - cx) + Math.cos(rad) * (clickY - cy) + cy;
+
+            if (unrotX >= layer.x && unrotX <= layer.x + layer.w &&
+                unrotY >= layer.y && unrotY <= layer.y + layer.h) {
+              interactionMode = 'move';
+              dragOffsetX = clickX - layer.x;
+              dragOffsetY = clickY - layer.y;
+              return;
+            }
+          }
+        }
+      }
+
+      const clickedLayer = layers.find(l => {
+        const cx = l.x + l.w / 2;
+        const cy = l.y + l.h / 2;
+        const rad = -(l.rotation || 0) * (Math.PI / 180);
+        const unrotX = Math.cos(rad) * (clickX - cx) - Math.sin(rad) * (clickY - cy) + cx;
+        const unrotY = Math.sin(rad) * (clickX - cx) + Math.cos(rad) * (clickY - cy) + cy;
+        return unrotX >= l.x && unrotX <= l.x + l.w && unrotY >= l.y && unrotY <= l.y + l.h;
+      });
+
+      if (clickedLayer) { selectLayer(clickedLayer.id); return; }
+
+      activeLayerId = null;
+      isDraggingSelection = true;
+      isFixed = false;
+      startX = clickX; startY = clickY;
+      currentSelection = { x: startX, y: startY, w: 0, h: 0 };
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!originalImage || !e.isPrimary) return;
+
+      if (isPanning) {
+        panX = e.clientX - panStartX;
+        panY = e.clientY - panStartY;
+        renderAll();
+        return;
+      }
+
+      const { x: clickX, y: clickY } = getCanvasCoords(e);
+      const activeLayer = layers.find(l => l.id === activeLayerId);
+
+      if (interactionMode && activeLayer) {
+        if (interactionMode === 'rotate') {
+          // 📌 회전각(Angle) 마우스 위치 기반 계산
+          const cx = activeLayer.x + activeLayer.w / 2;
+          const cy = activeLayer.y + activeLayer.h / 2;
+          const radians = Math.atan2(clickY - cy, clickX - cx);
+          let degrees = Math.round(radians * (180 / Math.PI) + 90);
+          if (degrees < 0) degrees += 360;
+
+          activeLayer.rotation = degrees;
+          textRotation.value = degrees;
+        } else if (interactionMode === 'move') {
+          activeLayer.x = clickX - dragOffsetX;
+          activeLayer.y = clickY - dragOffsetY;
+          currentSelection = { x: activeLayer.x, y: activeLayer.y, w: activeLayer.w, h: activeLayer.h };
+        } else if (interactionMode.startsWith('resize-')) {
+          const handle = interactionMode.replace('resize-', '');
+          const dx = clickX - initialLayerState.clickX;
+          const dy = clickY - initialLayerState.clickY;
+
+          if (handle === 'br') {
+            activeLayer.w = Math.max(15, initialLayerState.w + dx);
+            activeLayer.h = Math.max(10, initialLayerState.h + dy);
+          } else if (handle === 'tl') {
+            const nw = initialLayerState.w - dx, nh = initialLayerState.h - dy;
+            if (nw > 15) { activeLayer.x = initialLayerState.x + dx; activeLayer.w = nw; }
+            if (nh > 10) { activeLayer.y = initialLayerState.y + dy; activeLayer.h = nh; }
+          } else if (handle === 'tr') {
+            activeLayer.w = Math.max(15, initialLayerState.w + dx);
+            const nh = initialLayerState.h - dy;
+            if (nh > 10) { activeLayer.y = initialLayerState.y + dy; activeLayer.h = nh; }
+          } else if (handle === 'bl') {
+            const nw = initialLayerState.w - dx;
+            if (nw > 15) { activeLayer.x = initialLayerState.x + dx; activeLayer.w = nw; }
+            activeLayer.h = Math.max(10, initialLayerState.h + dy);
+          }
+
+          const scale = activeLayer.h / initialLayerState.h;
+          activeLayer.size = Math.max(8, Math.round(initialLayerState.size * scale));
+          fontSize.value = activeLayer.size;
+          currentSelection = { x: activeLayer.x, y: activeLayer.y, w: activeLayer.w, h: activeLayer.h };
+        }
+        renderAll(); return;
+      }
+
+      if (isDraggingSelection && !isFixed) {
+        currentSelection.x = Math.min(startX, clickX);
+        currentSelection.y = Math.min(startY, clickY);
+        currentSelection.w = Math.abs(clickX - startX);
+        currentSelection.h = Math.abs(clickY - startY);
+        renderAll();
+      }
+    });
+
+    canvas.addEventListener('pointerup', (e) => {
+      if (!e.isPrimary) return;
+      try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+
+      if (isPanning) {
+        isPanning = false;
+        canvas.style.cursor = isSpacePressed ? 'grab' : 'crosshair';
+        return;
+      }
+
+      if (interactionMode) { saveHistory(); interactionMode = null; return; }
+
+      if (isDraggingSelection) {
+        isDraggingSelection = false;
+        const threshold = (e.pointerType === 'pen') ? 3 : 10;
+        if (currentSelection && currentSelection.w > threshold && currentSelection.h > threshold) {
+          isFixed = true;
+          runOptimizedOCR(currentSelection);
+          applyLayerBtn.disabled = false;
+        } else {
+          currentSelection = null; renderAll();
+        }
+      }
+    });
+
+    // --- OCR Preprocessing ---
+    function preprocessCanvasForOCR(sourceCanvas, region) {
+      const scale = 2;
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = region.w * scale;
+      tempCanvas.height = region.h * scale;
+      const tempCtx = tempCanvas.getContext('2d');
+
+      tempCtx.imageSmoothingEnabled = false;
+      tempCtx.drawImage(
+        sourceCanvas, 
+        region.x, region.y, region.w, region.h, 
+        0, 0, region.w * scale, region.h * scale
+      );
+
+      const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
+      const data = imgData.data;
+      const contrastFactor = 1.6;
+
+      for (let i = 0; i < data.length; i += 4) {
+        let gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+        gray = ((gray - 128) * contrastFactor) + 128;
+        const val = gray > 128 ? 255 : 0;
+
+        data[i]     = val;
+        data[i + 1] = val;
+        data[i + 2] = val;
+      }
+
+      tempCtx.putImageData(imgData, 0, 0);
+      return tempCanvas;
+    }
+
+    async function runOptimizedOCR(region) {
+      ocrStatus.style.display = 'inline-flex';
+      ocrStatus.textContent = '⏳ 분석 중...';
+      textInput.value = '';
+
+      const processedCanvas = preprocessCanvasForOCR(canvas, region);
+
+      try {
+        if (!globalOcrWorker) await initOCRWorker();
+        const result = await globalOcrWorker.recognize(processedCanvas);
+        textInput.value = result.data.text.trim() || '텍스트 입력...';
+      } catch (err) {
+        console.error('OCR Error:', err);
+        textInput.value = '인식 실패 - 직접 입력';
+      } finally {
+        ocrStatus.style.display = 'none';
+        renderAll();
+      }
+    }
+
+    // --- Inpainting Algorithm ---
+    function applyEdgeInpainting(ctx, x, y, w, h) {
+      const margin = 4;
+      const leftPx = ctx.getImageData(Math.max(0, x - margin), y + h/2, 1, 1).data;
+      const rightPx = ctx.getImageData(Math.min(canvas.width - 1, x + w + margin), y + h/2, 1, 1).data;
+      const topPx = ctx.getImageData(x + w/2, Math.max(0, y - margin), 1, 1).data;
+
+      const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+      grad.addColorStop(0, `rgb(${topPx[0]}, ${topPx[1]}, ${topPx[2]})`);
+      grad.addColorStop(0.5, `rgb(${leftPx[0]}, ${leftPx[1]}, ${leftPx[2]})`);
+      grad.addColorStop(1, `rgb(${rightPx[0]}, ${rightPx[1]}, ${rightPx[2]})`);
+
+      ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
+    }
+
+    // --- 📌 Main Render Engine with Rotate & Align ---
+    async function renderAll() {
+      if (!originalImage) return;
+
+      ctx.save();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.translate(panX, panY);
+      ctx.scale(zoomScale, zoomScale);
+
+      ctx.drawImage(originalImage, 0, 0);
+
+      // Render Committed Layers
+      for (const layer of layers) {
+        ctx.save();
+
+        const cx = layer.x + layer.w / 2;
+        const cy = layer.y + layer.h / 2;
+        ctx.translate(cx, cy);
+
+        // 회전(Rotation) 적용
+        const rad = (layer.rotation || 0) * (Math.PI / 180);
+        ctx.rotate(rad);
+
+        const localX = -layer.w / 2;
+        const localY = -layer.h / 2;
+
+        if (layer.bgMode === 'inpaint') {
+          applyEdgeInpainting(ctx, localX, localY, layer.w, layer.h);
+        } else {
+          ctx.fillStyle = layer.bgColor;
+          ctx.fillRect(localX, localY, layer.w, layer.h);
+        }
+
+        await document.fonts.load(`${layer.bold ? 'bold ' : ''}${layer.size}px "${layer.font}"`);
+        ctx.font = `${layer.bold ? 'bold ' : ''}${layer.size}px "${layer.font}"`;
+        ctx.fillStyle = layer.color;
+        ctx.textBaseline = 'top';
+
+        // 📌 텍스트 정렬(TextAlign) 축 연산
+        let textX = localX + 4;
+        if (layer.align === 'center') {
+          ctx.textAlign = 'center';
+          textX = 0;
+        } else if (layer.align === 'right') {
+          ctx.textAlign = 'right';
+          textX = localX + layer.w - 4;
+        } else {
+          ctx.textAlign = 'left';
+        }
+
+        ctx.fillText(layer.text, textX, localY + 4);
+
+        // Active Layer Highlight & Rotate/Resize Controls
+        if (layer.id === activeLayerId) {
+          ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2 / zoomScale; ctx.setLineDash([]);
+          ctx.strokeRect(localX, localY, layer.w, layer.h);
+
+          // 회전 연결선 및 상단 핸들 드로잉
+          const rotY = localY - 25 / zoomScale;
+          ctx.beginPath();
+          ctx.moveTo(0, localY);
+          ctx.lineTo(0, rotY);
+          ctx.strokeStyle = '#10b981';
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.arc(0, rotY, 6 / zoomScale, 0, Math.PI * 2);
+          ctx.fillStyle = '#3b82f6'; ctx.fill(); ctx.stroke();
+
+          // 4개 모서리 핸들
+          const handles = getResizeHandles({ x: localX, y: localY, w: layer.w, h: layer.h }, 10 / zoomScale);
+          ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#10b981';
+          ['tl', 'tr', 'bl', 'br'].forEach(key => {
+            const h = handles[key];
+            ctx.fillRect(h.x, h.y, 10 / zoomScale, 10 / zoomScale);
+            ctx.strokeRect(h.x, h.y, 10 / zoomScale, 10 / zoomScale);
+          });
+        }
+
+        ctx.restore();
+      }
+
+      // Draw Uncommitted Selection Box
+      if (currentSelection && !activeLayerId) {
+        const { x, y, w, h } = currentSelection;
+        if (bgFillMode.value === 'inpaint') applyEdgeInpainting(ctx, x, y, w, h);
+        else { ctx.fillStyle = bgColorPicker.value; ctx.fillRect(x, y, w, h); }
+
+        const font = fontFamily.value, size = parseInt(fontSize.value, 10), bold = isBold.checked ? 'bold ' : '';
+        await document.fonts.load(`${bold}${size}px "${font}"`);
+        ctx.font = `${bold}${size}px "${font}"`; ctx.fillStyle = textColor.value;
+        ctx.textBaseline = 'top';
+
+        let textX = x + 4;
+        if (textAlign.value === 'center') { ctx.textAlign = 'center'; textX = x + w / 2; }
+        else if (textAlign.value === 'right') { ctx.textAlign = 'right'; textX = x + w - 4; }
+        else { ctx.textAlign = 'left'; }
+
+        ctx.fillText(textInput.value, textX, y + 4);
+
+        ctx.strokeStyle = isFixed ? '#3b82f6' : '#f59e0b';
+        ctx.lineWidth = 2 / zoomScale; ctx.setLineDash(isFixed ? [] : [6 / zoomScale, 6 / zoomScale]);
+        ctx.strokeRect(x, y, w, h);
+      }
+
+      ctx.restore();
+    }
+
+    // --- Layer Controls & Property Bindings ---
+    applyLayerBtn.addEventListener('click', () => {
+      if (!currentSelection) return;
+      saveHistory();
+
+      const newLayer = {
+        id: activeLayerId || Date.now(),
+        x: currentSelection.x, y: currentSelection.y, w: currentSelection.w, h: currentSelection.h,
+        text: textInput.value, font: fontFamily.value, size: parseInt(fontSize.value, 10),
+        color: textColor.value, bold: isBold.checked, align: textAlign.value,
+        rotation: parseInt(textRotation.value, 10) || 0,
+        bgMode: bgFillMode.value, bgColor: bgColorPicker.value
+      };
+
+      const existingIndex = layers.findIndex(l => l.id === newLayer.id);
+      if (existingIndex >= 0) layers[existingIndex] = newLayer;
+      else layers.push(newLayer);
+
+      currentSelection = null; isFixed = false; activeLayerId = null;
+      applyLayerBtn.disabled = true;
+      updateLayerListUI(); renderAll();
+    });
+
+    function selectLayer(id) {
+      const layer = layers.find(l => l.id === id);
+      if (!layer) return;
+      activeLayerId = layer.id;
+      currentSelection = { x: layer.x, y: layer.y, w: layer.w, h: layer.h };
+      isFixed = true;
+
+      textInput.value = layer.text; fontFamily.value = layer.font; fontSize.value = layer.size;
+      textColor.value = layer.color; isBold.checked = layer.bold;
+      textAlign.value = layer.align || 'left'; textRotation.value = layer.rotation || 0;
+      bgFillMode.value = layer.bgMode; bgColorPicker.value = layer.bgColor;
+
+      applyLayerBtn.disabled = false;
+      updateLayerListUI(); renderAll();
+    }
+
+    function deleteLayer(id, e) {
+      e.stopPropagation(); saveHistory();
+      layers = layers.filter(l => l.id !== id);
+      if (activeLayerId === id) { activeLayerId = null; currentSelection = null; isFixed = false; }
+      updateLayerListUI(); renderAll();
+    }
+
+    function updateLayerListUI() {
+      layerList.innerHTML = '';
+      if (layers.length === 0) {
+        layerList.innerHTML = `<div style="font-size:0.78rem; color:var(--text-sub); text-align:center; padding:10px;">수정된 레이어가 없습니다.</div>`;
+        return;
+      }
+      layers.forEach((layer, idx) => {
+        const item = document.createElement('div');
+        item.className = `layer-item ${layer.id === activeLayerId ? 'active' : ''}`;
+        item.onclick = () => selectLayer(layer.id);
+        item.innerHTML = `
+          <span>영역 #${idx + 1}: "${layer.text.substring(0, 10)}..."</span>
+          <div class="layer-actions">
+            <button class="btn btn-outline btn-sm" onclick="deleteLayer(${layer.id}, event)">🗑️</button>
+          </div>
+        `;
+        layerList.appendChild(item);
+      });
+    }
+
+    [textInput, fontFamily, fontSize, textColor, isBold, textAlign, textRotation, bgFillMode, bgColorPicker].forEach(element => {
+      element.addEventListener('input', () => {
+        solidColorGroup.style.display = (bgFillMode.value === 'solid') ? 'flex' : 'none';
+        if (activeLayerId) {
+          const layer = layers.find(l => l.id === activeLayerId);
+          if (layer) {
+            layer.text = textInput.value; layer.font = fontFamily.value;
+            layer.size = parseInt(fontSize.value, 10); layer.color = textColor.value;
+            layer.bold = isBold.checked; layer.align = textAlign.value;
+            layer.rotation = parseInt(textRotation.value, 10) || 0;
+            layer.bgMode = bgFillMode.value; layer.bgColor = bgColorPicker.value;
+          }
+        }
+        renderAll();
+      });
+    });
+
+    togglePreviewBtn.addEventListener('mousedown', () => {
+      ctx.save(); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.translate(panX, panY); ctx.scale(zoomScale, zoomScale);
+      ctx.drawImage(originalImage, 0, 0); ctx.restore();
+    });
+    togglePreviewBtn.addEventListener('touchstart', () => {
+      ctx.save(); ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.translate(panX, panY); ctx.scale(zoomScale, zoomScale);
+      ctx.drawImage(originalImage, 0, 0); ctx.restore();
+    });
+    togglePreviewBtn.addEventListener('mouseup', () => renderAll());
+    togglePreviewBtn.addEventListener('touchend', () => renderAll());
+
+    downloadBtn.addEventListener('click', () => {
+      if (!originalImage) return;
+
+      const exportCanvas = document.createElement('canvas');
+      exportCanvas.width = originalImage.width;
+      exportCanvas.height = originalImage.height;
+      const exportCtx = exportCanvas.getContext('2d');
+
+      exportCtx.drawImage(originalImage, 0, 0);
+
+      for (const layer of layers) {
+        exportCtx.save();
+        const cx = layer.x + layer.w / 2;
+        const cy = layer.y + layer.h / 2;
+        exportCtx.translate(cx, cy);
+        exportCtx.rotate((layer.rotation || 0) * (Math.PI / 180));
+
+        const localX = -layer.w / 2;
+        const localY = -layer.h / 2;
+
+        if (layer.bgMode === 'inpaint') {
+          applyEdgeInpainting(exportCtx, localX, localY, layer.w, layer.h);
+        } else {
+          exportCtx.fillStyle = layer.bgColor;
+          exportCtx.fillRect(localX, localY, layer.w, layer.h);
+        }
+
+        exportCtx.font = `${layer.bold ? 'bold ' : ''}${layer.size}px "${layer.font}"`;
+        exportCtx.fillStyle = layer.color;
+        exportCtx.textBaseline = 'top';
+
+        let textX = localX + 4;
+        if (layer.align === 'center') { exportCtx.textAlign = 'center'; textX = 0; }
+        else if (layer.align === 'right') { exportCtx.textAlign = 'right'; textX = localX + layer.w - 4; }
+        else { exportCtx.textAlign = 'left'; }
+
+        exportCtx.fillText(layer.text, textX, localY + 4);
+        exportCtx.restore();
+      }
+
+      const link = document.createElement('a');
+      link.download = `edited_image_${Date.now()}.png`;
+      link.href = exportCanvas.toDataURL('image/png', 1.0);
+      link.click();
+    });
+  </script>
+</body>
+</html>
