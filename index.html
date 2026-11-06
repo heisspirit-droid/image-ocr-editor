@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>고성능 OCR & 인페인팅 에디터 (선택 투명도 보정판)</title>
+  <title>고성능 OCR & 인페인팅 에디터 (줄바꿈 & 줄간격 완벽 지원)</title>
   
   <!-- Google Fonts CDN Integration (12 Fonts) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -149,7 +149,7 @@
       border-radius: 4px;
       font-size: 0.85rem;
     }
-    textarea { resize: vertical; min-height: 60px; }
+    textarea { resize: vertical; min-height: 65px; }
     .inline-inputs { display: flex; gap: 8px; align-items: center; }
 
     .ocr-status { font-size: 0.75rem; color: #38bdf8; display: none; align-items: center; gap: 4px; }
@@ -207,13 +207,13 @@
           <span id="ocrStatus" class="ocr-status">⏳ OCR 준비 중...</span>
         </div>
         <div class="form-group">
-          <label>수정 텍스트 내용</label>
+          <label>수정 텍스트 내용 (Enter 키로 줄바꿈 가능)</label>
           <textarea id="textInput" placeholder="캔버스 상에서 수정할 영역을 드래그하세요..."></textarea>
         </div>
       </div>
 
       <div class="panel-section">
-        <div class="section-title">2. 폰트 & 스타일 & 정렬/회전</div>
+        <div class="section-title">2. 폰트 & 스타일 & 줄간격/정렬</div>
         <div class="form-group">
           <label>글꼴 (Google Fonts 12종)</label>
           <select id="fontFamily">
@@ -242,11 +242,12 @@
             <input type="number" id="fontSize" value="24" min="8" max="300">
           </div>
           <div style="flex:1;">
+            <label>줄간격 배율</label>
+            <input type="number" id="lineHeight" value="1.2" min="0.5" max="3.0" step="0.1">
+          </div>
+          <div style="flex:1;">
             <label>글자 색상</label>
             <input type="color" id="textColor" value="#ffffff" style="height:35px; cursor:pointer;">
-          </div>
-          <div style="margin-top: 15px;">
-            <label><input type="checkbox" id="isBold"> Bold</label>
           </div>
         </div>
 
@@ -262,6 +263,9 @@
           <div style="flex:1;">
             <label>회전 각도(°)</label>
             <input type="number" id="textRotation" value="0" min="0" max="360">
+          </div>
+          <div style="margin-top: 15px;">
+            <label><input type="checkbox" id="isBold"> Bold</label>
           </div>
         </div>
       </div>
@@ -332,6 +336,7 @@
     const textInput = document.getElementById('textInput');
     const fontFamily = document.getElementById('fontFamily');
     const fontSize = document.getElementById('fontSize');
+    const lineHeight = document.getElementById('lineHeight');
     const textColor = document.getElementById('textColor');
     const isBold = document.getElementById('isBold');
     const textAlign = document.getElementById('textAlign');
@@ -577,6 +582,22 @@
 
       if (clickedLayer) { selectLayer(clickedLayer.id); return; }
 
+      // 미확정 작업 자동 확정
+      if (currentSelection && isFixed && !activeLayerId) {
+        saveHistory();
+        const autoLayer = {
+          id: Date.now(),
+          x: currentSelection.x, y: currentSelection.y, w: currentSelection.w, h: currentSelection.h,
+          text: textInput.value, font: fontFamily.value, size: parseInt(fontSize.value, 10),
+          lineHeight: parseFloat(lineHeight.value) || 1.2,
+          color: textColor.value, bold: isBold.checked, align: textAlign.value,
+          rotation: parseInt(textRotation.value, 10) || 0,
+          bgMode: bgFillMode.value, bgColor: bgColorPicker.value
+        };
+        layers.push(autoLayer);
+        updateLayerListUI();
+      }
+
       activeLayerId = null;
       isDraggingSelection = true;
       isFixed = false;
@@ -676,7 +697,7 @@
       }
     });
 
-    // OCR Preprocessing (원본 픽셀 유지)
+    // OCR Preprocessing
     function preprocessCanvasForOCR(region) {
       const scale = 2;
       const tempCanvas = document.createElement('canvas');
@@ -730,31 +751,60 @@
       }
     }
 
-    // Edge Inpainting (복원 처리)
+    // Edge Inpainting (선택 영역 미세 보정 적용)
     function applyEdgeInpainting(targetCtx, x, y, w, h) {
+      const pad = 2;
+      const ix = Math.max(0, x - pad);
+      const iy = Math.max(0, y - pad);
+      const iw = w + (pad * 2);
+      const ih = h + (pad * 2);
+
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = originalImage.width;
       tempCanvas.height = originalImage.height;
       const tempCtx = tempCanvas.getContext('2d');
       tempCtx.drawImage(originalImage, 0, 0);
 
-      const margin = 3;
-      const leftPx = tempCtx.getImageData(Math.max(0, x - margin), Math.min(originalImage.height - 1, y + h / 2), 1, 1).data;
-      const rightPx = tempCtx.getImageData(Math.min(originalImage.width - 1, x + w + margin), Math.min(originalImage.height - 1, y + h / 2), 1, 1).data;
-      const topPx = tempCtx.getImageData(Math.min(originalImage.width - 1, x + w / 2), Math.max(0, y - margin), 1, 1).data;
-      const bottomPx = tempCtx.getImageData(Math.min(originalImage.width - 1, x + w / 2), Math.min(originalImage.height - 1, y + h + margin), 1, 1).data;
+      const margin = 4;
+      const leftPx = tempCtx.getImageData(Math.max(0, ix - margin), Math.min(originalImage.height - 1, iy + ih / 2), 1, 1).data;
+      const rightPx = tempCtx.getImageData(Math.min(originalImage.width - 1, ix + iw + margin), Math.min(originalImage.height - 1, iy + ih / 2), 1, 1).data;
+      const topPx = tempCtx.getImageData(Math.min(originalImage.width - 1, ix + iw / 2), Math.max(0, iy - margin), 1, 1).data;
+      const bottomPx = tempCtx.getImageData(Math.min(originalImage.width - 1, ix + iw / 2), Math.min(originalImage.height - 1, iy + ih + margin), 1, 1).data;
 
-      const grad = targetCtx.createLinearGradient(x, y, x + w, y + h);
+      const grad = targetCtx.createLinearGradient(ix, iy, ix + iw, iy + ih);
       grad.addColorStop(0, `rgb(${topPx[0]}, ${topPx[1]}, ${topPx[2]})`);
       grad.addColorStop(0.35, `rgb(${leftPx[0]}, ${leftPx[1]}, ${leftPx[2]})`);
       grad.addColorStop(0.7, `rgb(${rightPx[0]}, ${rightPx[1]}, ${rightPx[2]})`);
       grad.addColorStop(1, `rgb(${bottomPx[0]}, ${bottomPx[1]}, ${bottomPx[2]})`);
 
       targetCtx.fillStyle = grad;
-      targetCtx.fillRect(x, y, w, h);
+      targetCtx.fillRect(ix, iy, iw, ih);
     }
 
-    // 📌 Main Render Engine (선택 드래그 중 완전 투명 처리)
+    // 📌 멀티라인(줄바꿈) 및 줄간격 계산 처리 렌더링 함수
+    function drawMultilineText(targetCtx, text, startX, startY, width, size, lHeight, align) {
+      const lines = text.split('\n');
+      const lineStep = size * lHeight;
+
+      lines.forEach((line, index) => {
+        let textX = startX;
+        if (align === 'center') {
+          targetCtx.textAlign = 'center';
+          textX = startX + width / 2;
+        } else if (align === 'right') {
+          targetCtx.textAlign = 'right';
+          textX = startX + width - 4;
+        } else {
+          targetCtx.textAlign = 'left';
+          textX = startX + 4;
+        }
+
+        const currentY = startY + 4 + (index * lineStep);
+        targetCtx.fillText(line, textX, currentY);
+      });
+    }
+
+    // Main Render Engine
     async function renderAll() {
       if (!originalImage) return;
 
@@ -764,12 +814,20 @@
       ctx.translate(panX, panY);
       ctx.scale(zoomScale, zoomScale);
 
+      // 1. 원본 이미지 그리기
       ctx.drawImage(originalImage, 0, 0);
 
-      // 확정된 레이어들 렌더링
+      // 2. 확정된 레이어들 렌더링
       for (const layer of layers) {
-        ctx.save();
+        // 회전 전 절대 좌표 기반 배경 복원
+        if (layer.bgMode === 'inpaint') {
+          applyEdgeInpainting(ctx, layer.x, layer.y, layer.w, layer.h);
+        } else {
+          ctx.fillStyle = layer.bgColor;
+          ctx.fillRect(layer.x - 2, layer.y - 2, layer.w + 4, layer.h + 4);
+        }
 
+        ctx.save();
         const cx = layer.x + layer.w / 2;
         const cy = layer.y + layer.h / 2;
         ctx.translate(cx, cy);
@@ -780,24 +838,14 @@
         const localX = -layer.w / 2;
         const localY = -layer.h / 2;
 
-        if (layer.bgMode === 'inpaint') {
-          applyEdgeInpainting(ctx, layer.x, layer.y, layer.w, layer.h);
-        } else {
-          ctx.fillStyle = layer.bgColor;
-          ctx.fillRect(localX, localY, layer.w, layer.h);
-        }
-
+        const lHeight = layer.lineHeight || 1.2;
         await document.fonts.load(`${layer.bold ? 'bold ' : ''}${layer.size}px "${layer.font}"`);
         ctx.font = `${layer.bold ? 'bold ' : ''}${layer.size}px "${layer.font}"`;
         ctx.fillStyle = layer.color;
         ctx.textBaseline = 'top';
 
-        let textX = localX + 4;
-        if (layer.align === 'center') { ctx.textAlign = 'center'; textX = 0; }
-        else if (layer.align === 'right') { ctx.textAlign = 'right'; textX = localX + layer.w - 4; }
-        else { ctx.textAlign = 'left'; }
-
-        ctx.fillText(layer.text, textX, localY + 4);
+        // 멀티라인 텍스트 렌더링
+        drawMultilineText(ctx, layer.text, localX, localY, layer.w, layer.size, lHeight, layer.align);
 
         if (layer.id === activeLayerId) {
           ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2 / zoomScale; ctx.setLineDash([]);
@@ -826,29 +874,30 @@
         ctx.restore();
       }
 
-      // 📌 미확정 선택 박스 (드래그 중에는 완전 투명 처리하여 원본 글씨가 뚜렷하게 보이도록 함)
+      // 3. 미확정 선택 영역 렌더링
       if (currentSelection && !activeLayerId) {
         const { x, y, w, h } = currentSelection;
         
-        // 고정(isFixed) 상태가 된 경우에만 배경 덮기 & 새 텍스트 프리뷰 렌더링
         if (isFixed) {
           if (bgFillMode.value === 'inpaint') applyEdgeInpainting(ctx, x, y, w, h);
-          else { ctx.fillStyle = bgColorPicker.value; ctx.fillRect(x, y, w, h); }
+          else { 
+            ctx.fillStyle = bgColorPicker.value; 
+            ctx.fillRect(x - 2, y - 2, w + 4, h + 4); 
+          }
 
-          const font = fontFamily.value, size = parseInt(fontSize.value, 10), bold = isBold.checked ? 'bold ' : '';
+          const font = fontFamily.value;
+          const size = parseInt(fontSize.value, 10);
+          const lHeight = parseFloat(lineHeight.value) || 1.2;
+          const bold = isBold.checked ? 'bold ' : '';
+
           await document.fonts.load(`${bold}${size}px "${font}"`);
           ctx.font = `${bold}${size}px "${font}"`; ctx.fillStyle = textColor.value;
           ctx.textBaseline = 'top';
 
-          let textX = x + 4;
-          if (textAlign.value === 'center') { ctx.textAlign = 'center'; textX = x + w / 2; }
-          else if (textAlign.value === 'right') { ctx.textAlign = 'right'; textX = x + w - 4; }
-          else { ctx.textAlign = 'left'; }
-
-          ctx.fillText(textInput.value, textX, y + 4);
+          // 멀티라인 텍스트 렌더링
+          drawMultilineText(ctx, textInput.value, x, y, w, size, lHeight, textAlign.value);
         }
 
-        // 선택 영역 테두리 (드래그 중에는 원본 텍스트가 가려지지 않는 파란/주황 점선)
         ctx.strokeStyle = isFixed ? '#3b82f6' : '#38bdf8';
         ctx.lineWidth = 2 / zoomScale; 
         ctx.setLineDash(isFixed ? [] : [6 / zoomScale, 6 / zoomScale]);
@@ -867,6 +916,7 @@
         id: activeLayerId || Date.now(),
         x: currentSelection.x, y: currentSelection.y, w: currentSelection.w, h: currentSelection.h,
         text: textInput.value, font: fontFamily.value, size: parseInt(fontSize.value, 10),
+        lineHeight: parseFloat(lineHeight.value) || 1.2,
         color: textColor.value, bold: isBold.checked, align: textAlign.value,
         rotation: parseInt(textRotation.value, 10) || 0,
         bgMode: bgFillMode.value, bgColor: bgColorPicker.value
@@ -889,6 +939,7 @@
       isFixed = true;
 
       textInput.value = layer.text; fontFamily.value = layer.font; fontSize.value = layer.size;
+      lineHeight.value = layer.lineHeight || 1.2;
       textColor.value = layer.color; isBold.checked = layer.bold;
       textAlign.value = layer.align || 'left'; textRotation.value = layer.rotation || 0;
       bgFillMode.value = layer.bgMode; bgColorPicker.value = layer.bgColor;
@@ -914,8 +965,9 @@
         const item = document.createElement('div');
         item.className = `layer-item ${layer.id === activeLayerId ? 'active' : ''}`;
         item.onclick = () => selectLayer(layer.id);
+        const displayText = layer.text.replace(/\n/g, ' ').substring(0, 10);
         item.innerHTML = `
-          <span>영역 #${idx + 1}: "${layer.text.substring(0, 10)}..."</span>
+          <span>영역 #${idx + 1}: "${displayText}..."</span>
           <div class="layer-actions">
             <button class="btn btn-outline btn-sm" onclick="deleteLayer(${layer.id}, event)">🗑️</button>
           </div>
@@ -924,15 +976,17 @@
       });
     }
 
-    [textInput, fontFamily, fontSize, textColor, isBold, textAlign, textRotation, bgFillMode, bgColorPicker].forEach(element => {
+    [textInput, fontFamily, fontSize, lineHeight, textColor, isBold, textAlign, textRotation, bgFillMode, bgColorPicker].forEach(element => {
       element.addEventListener('input', () => {
         solidColorGroup.style.display = (bgFillMode.value === 'solid') ? 'flex' : 'none';
         if (activeLayerId) {
           const layer = layers.find(l => l.id === activeLayerId);
           if (layer) {
             layer.text = textInput.value; layer.font = fontFamily.value;
-            layer.size = parseInt(fontSize.value, 10); layer.color = textColor.value;
-            layer.bold = isBold.checked; layer.align = textAlign.value;
+            layer.size = parseInt(fontSize.value, 10);
+            layer.lineHeight = parseFloat(lineHeight.value) || 1.2;
+            layer.color = textColor.value; layer.bold = isBold.checked; 
+            layer.align = textAlign.value;
             layer.rotation = parseInt(textRotation.value, 10) || 0;
             layer.bgMode = bgFillMode.value; layer.bgColor = bgColorPicker.value;
           }
@@ -965,6 +1019,13 @@
       exportCtx.drawImage(originalImage, 0, 0);
 
       for (const layer of layers) {
+        if (layer.bgMode === 'inpaint') {
+          applyEdgeInpainting(exportCtx, layer.x, layer.y, layer.w, layer.h);
+        } else {
+          exportCtx.fillStyle = layer.bgColor;
+          exportCtx.fillRect(layer.x - 2, layer.y - 2, layer.w + 4, layer.h + 4);
+        }
+
         exportCtx.save();
         const cx = layer.x + layer.w / 2;
         const cy = layer.y + layer.h / 2;
@@ -973,24 +1034,13 @@
 
         const localX = -layer.w / 2;
         const localY = -layer.h / 2;
-
-        if (layer.bgMode === 'inpaint') {
-          applyEdgeInpainting(exportCtx, layer.x, layer.y, layer.w, layer.h);
-        } else {
-          exportCtx.fillStyle = layer.bgColor;
-          exportCtx.fillRect(localX, localY, layer.w, layer.h);
-        }
+        const lHeight = layer.lineHeight || 1.2;
 
         exportCtx.font = `${layer.bold ? 'bold ' : ''}${layer.size}px "${layer.font}"`;
         exportCtx.fillStyle = layer.color;
         exportCtx.textBaseline = 'top';
 
-        let textX = localX + 4;
-        if (layer.align === 'center') { exportCtx.textAlign = 'center'; textX = 0; }
-        else if (layer.align === 'right') { exportCtx.textAlign = 'right'; textX = localX + layer.w - 4; }
-        else { exportCtx.textAlign = 'left'; }
-
-        exportCtx.fillText(layer.text, textX, localY + 4);
+        drawMultilineText(exportCtx, layer.text, localX, localY, layer.w, layer.size, lHeight, layer.align);
         exportCtx.restore();
       }
 
