@@ -1,46 +1,70 @@
-# ✏️ 이미지 OCR & 인페인팅 텍스트 에디터 (Web App)
+# ⚡ 고성능 OCR & 인페인팅 웹 에디터
 
-AI Studio 연동 및 태블릿/PC 환경을 지원하는 **클라이언트 전용 단일 파일 이미지 텍스트 수정 웹 앱**입니다.  
-별도의 서버 설치나 API 키 입력 없이 브라우저에서 100% 동작하며, 이미지 내의 텍스트를 드래그하여 인식(OCR)하고 자연스럽게 배경을 복원(Inpainting)하여 재편집할 수 있습니다.
+<p align="left">
+  <img src="https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black" />
+  <img src="https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white" />
+  <img src="https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white" />
+  <img src="https://img.shields.io/badge/Tesseract.js-v5.0-blue?style=for-the-badge" />
+</p>
 
----
-
-## 🌟 주요 기능 (Key Features)
-
-- **⚡ 0.1초 고속 클라이언트 OCR**: `Tesseract.js` 사전 웜업(Warm-up) 및 `tessdata_fast` 모델 기반의 초고속 한글/영어 텍스트 자동 인식
-- **🔍 2배 이진화 전처리**: 선택 영역 픽셀 2배 스케일업 및 명암 대비 강화를 통해 복잡한 배경 속 얇은 글씨 인식률 극대화
-- **✨ 자동 그라데이션 인페인팅**: 텍스트 영역 테두리 주변 픽셀을 분석하여 단색 자국 없이 자연스러운 배경 복원 (단색 채우기 모드 지원)
-- **🖊️ 스타일러스 펜 & 터치 정밀 조작**: Pointer Events API 기반으로 S펜, Apple Pencil, 마우스, 손가락 터치 완벽 구분 (펜 전용 8px 초정밀 모서리 핸들)
-- **📐 텍스트 회전 & 정렬**: 캔버스 상의 회전(Rotate) 핸들 드래그 조작 및 왼쪽/중앙/오른쪽 정렬 지원
-- **🔍 뷰포트 Zoom & Pan**: `Ctrl + 마우스 휠` 확대/축소(20%~500%) 및 `Spacebar + 드래그` 자유 화면 평면 이동
-- **🎨 구글 폰트 12종 동적 로딩**: Noto Sans KR, 고운바탕, Black Han Sans 등 한국어/영어 인기 글꼴 즉시 적용
-- **↩️ 히스토리 스택**: `Ctrl + Z` (Undo) / `Ctrl + Y` (Redo) 단축키 지원 및 다중 레이어 상태 관리
-- **💾 원본 화질 다운로드**: 줌/팬 상태와 무관하게 원본 100% Pixel 해상도로 고화질 PNG 저장
+웹 브라우저에서 이미지 내 텍스트를 영역 지정하여 **OCR로 자동 인식**하고, 원본 배경을 **자동 인페인팅(Inpainting)**으로 깨끗하게 복원한 뒤 새로운 멀티라인 텍스트로 교체할 수 있는 Canvas 기반 이미지 편집 도구입니다.
 
 ---
 
-## 🚀 사용 방법 (Usage)
+## 📌 목차 (Table of Contents)
+- [✨ 주요 기능](#-주요-기능-key-features)
+- [🛠️ 기술 스택](#️-기술-스택-tech-stack)
+- [🚀 시작하기](#-시작하기-getting-started)
+- [⌨️ 단축키 안내](#️-단축키-안내-shortcuts)
+- [📖 사용 방법](#-사용-방법-usage)
 
-1. **이미지 불러오기**: 상단 `📂 이미지 로드` 버튼을 눌러 수정할 이미지를 선택합니다.
-2. **영역 지정 (OCR)**: 수정하고 싶은 글자 영역을 마우스나 펜으로 드래그합니다. (0.1초 내 텍스트 자동 추출)
-3. **텍스트 & 스타일 수정**: 우측 패널에서 텍스트 내용, 폰트, 크기, 색상, 정렬 및 배경 복원 방식을 조절합니다.
-4. **회전 및 위치 조절**: 캔버스 상의 레이어를 이동하거나 상단 파란색 회전 핸들 및 모서리 리사이즈 핸들로 맞춥니다.
-5. **레이어 확정**: `✅ 레이어 확정` 버튼을 눌러 작업을 저장하고, 필요 시 다른 영역을 추가 수정합니다.
-6. **저장하기**: 상단 `💾 저장` 버튼을 눌러 결과물 PNG 이미지를 다운로드합니다.
+---
+
+## ✨ 주요 기능 (Key Features)
+
+- 🔄 **선택 영역 자동 저장 & 레이어화**
+  - 영역 지정 및 수정 후 캔버스의 다른 곳을 클릭하면 작업 중이던 내용이 **자동으로 레이어로 확정/등록**되어 안전하게 보존됩니다.
+
+- 🎨 **스마트 배경 복원 (Inpainting & Solid Fill)**
+  - 선택 영역 외곽 픽셀 샘플링 기반의 **자동 배경 복원(Edge Sampling Inpaint)** 기능으로 원본 글씨 자국을 깨끗하게 지웁니다.
+  - 단색(Solid Fill) 배경 채우기 모드도 자유롭게 전환할 수 있습니다.
+
+- 📝 **멀티라인 텍스트 & 줄간격 조절**
+  - OCR 인식 결과 및 직접 입력 시 `Enter` 키를 통한 **줄바꿈(Multiline)** 지원.
+  - 폰트 크기, 색상, Bold, 정렬(왼쪽/중앙/오른쪽)과 더불어 **줄간격 배율(Line Height)**까지 세밀하게 조절 가능합니다.
+
+- 🔍 **고정밀 OCR 엔진 탑재**
+  - `Tesseract.js v5` 기반 한/영 동시 인식 및 워커(Worker) 사전 웜업을 통한 속도 최적화.
+
+- 🔎 **캔버스 줌 & 팬 (Zoom & Pan)**
+  - 마우스 휠을 통한 Smooth 줌 인/아웃.
+  - `Space + Drag` 또는 마우스 휠 클릭을 통한 자유로운 화면 이동.
+
+- ↩️ **히스토리 관리 (Undo / Redo)**
+  - `Ctrl + Z` / `Ctrl + Y` 단축키를 통한 실시간 레이어 작업 취소 및 재실행 지원.
+
+- 🔤 **Google Fonts 연동**
+  - 12종의 다양한 한/영 구글 폰트 라이브러리 탑재.
 
 ---
 
 ## 🛠️ 기술 스택 (Tech Stack)
 
-- **Frontend**: HTML5 Canvas, Vanilla JavaScript (ES6+), CSS3 (CSS Variables, Responsive Layout)
-- **OCR Engine**: Tesseract.js v5 (`kor+eng`, `tessdata_fast`)
-- **Web APIs**: Pointer Events API, Canvas 2D Context Matrix (`translate`, `rotate`, `scale`), FileReader API
-- **Fonts**: Google Fonts CDN (12 Fonts)
-- **Deployment**: GitHub Pages (Static Hosting)
+| 구분 | 기술 / 라이브러리 | 설명 |
+| :--- | :--- | :--- |
+| **Language** | `JavaScript (ES6+)` | 메인 인터랙션 및 레이어 로직 구현 |
+| **Markup & Style** | `HTML5`, `CSS3` | 반응형 Split Workspace 레이아웃 |
+| **Graphic Engine** | `HTML5 Canvas 2D API` | 레이어 렌더링, Matrix Transform, Inpainting |
+| **AI / OCR** | `Tesseract.js (v5)` | 클라이언트 사이드 문자 인식 엔진 |
+| **Typography** | `Google Fonts API` | 한/영 웹폰트 12종 동적 로딩 |
 
 ---
 
-## 💡 팁 (Tips for Better OCR)
+## 🚀 시작하기 (Getting Started)
 
-- **여백 최소화**: 글자 테두리에 1~2px 정도만 여유를 두고 타이트하게 드래그하면 배경 노이즈가 제거되어 인식률이 높아집니다.
-- **화면 확대 이용**: 글씨가 작을 때는 `Ctrl + 휠`로 화면을 크게 확대한 후 드래그하면 해상도 샘플이 늘어나 정확도가 대폭 향상됩니다.
+단일 HTML 파일로 구성되어 있어 별도의 Node.js 환경 구축이나 빌드 과정 없이 **웹 브라우저에서 즉시 실행** 가능합니다.
+
+### 1. 저장소 복사
+```bash
+git clone [https://github.com/사용자이름/저장소이름.git](https://github.com/사용자이름/저장소이름.git)
+cd 저장소이름
