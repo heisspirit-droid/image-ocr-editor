@@ -68,3 +68,5 @@
 ```bash
 git clone [https://github.com/사용자이름/저장소이름.git](https://github.com/사용자이름/저장소이름.git)
 cd 저장소이름
+
+2. 실행index.html 파일을 웹 브라우저(Chrome, Edge 등)로 열어 사용합니다.⌨️ 단축키 안내 (Shortcuts)단축키기능 설명Space + Drag캔버스 화면 이동 (Pan)Mouse Wheel캔버스 확대 / 축소 (Zoom)Ctrl + Z실행 취소 (Undo)Ctrl + Y / Ctrl + Shift + Z다시 실행 (Redo)Ctrl + 0화면 크기 100% 맞춤 (Reset Zoom)📖 사용 방법 (Usage)📂 이미지 로드: 상단 메뉴의 📂 이미지 로드 버튼으로 편집할 이미지를 불러옵니다.🖱️ 영역 선택: 수정할 텍스트 영역을 마우스로 드래그합니다.✏️ OCR 인식 & 편집: 자동 추출된 텍스트를 정정하고 폰트, 크기, 줄간격, 배경 복원 옵션을 설정합니다.➕ 자동 확정 & 추가 수정: 다른 위치를 클릭하면 현재 편집건이 레이어로 자동 확정되며 새로운 영역 선택이 가능합니다.💾 결과물 저장: 편집이 끝난 이미지를 💾 저장 버튼을 눌러 PNG 파일로 다운로드합니다.
