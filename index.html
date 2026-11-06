@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-  <title>고성능 OCR & 인페인팅 에디터 (Rotate & Align 지원)</title>
+  <title>고성능 OCR & 인페인팅 에디터 (선택 투명도 보정판)</title>
   
   <!-- Google Fonts CDN Integration (12 Fonts) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -179,7 +179,7 @@
 
   <header>
     <div class="header-title">
-      ⚡ 고성능 OCR & 인페인팅 에디터 (Rotate & Align)
+      ⚡ 고성능 OCR & 인페인팅 에디터
     </div>
     <div class="header-controls">
       <button class="btn btn-outline" onclick="document.getElementById('imageLoader').click()">📂 이미지 로드</button>
@@ -250,7 +250,6 @@
           </div>
         </div>
 
-        <!-- 📌 정렬 및 회전 조절 컨트롤 추가 -->
         <div class="form-group inline-inputs">
           <div style="flex:1;">
             <label>텍스트 정렬</label>
@@ -271,7 +270,7 @@
         <div class="section-title">3. 배경 복원 모드</div>
         <div class="form-group">
           <select id="bgFillMode">
-            <option value="inpaint" selected>✨ 그라데이션 자동 복원 (Inpaint)</option>
+            <option value="inpaint" selected>✨ 엣지 샘플링 자동 복원 (Inpaint)</option>
             <option value="solid">🎨 단색 채우기 (Solid Fill)</option>
           </select>
         </div>
@@ -300,7 +299,6 @@
     const canvas = document.getElementById('mainCanvas');
     const ctx = canvas.getContext('2d');
 
-    // Tesseract Worker Singleton
     let globalOcrWorker = null;
     let isWorkerInitializing = false;
 
@@ -313,13 +311,13 @@
     let panStartY = 0;
     let isSpacePressed = false;
 
-    // Selection & Drag/Resize State
+    // Selection & Drag State
     let isDraggingSelection = false;
     let isFixed = false;
     let startX = 0, startY = 0;
     let currentSelection = null;
 
-    let interactionMode = null; // 'move' | 'resize-...' | 'rotate'
+    let interactionMode = null;
     let dragOffsetX = 0, dragOffsetY = 0;
     let initialLayerState = null;
 
@@ -351,7 +349,7 @@
     const zoomIndicator = document.getElementById('zoomIndicator');
     const layerList = document.getElementById('layerList');
 
-    // --- Tesseract Worker Warm-up ---
+    // Tesseract Worker 사전 로딩
     async function initOCRWorker() {
       if (globalOcrWorker || isWorkerInitializing) return;
       isWorkerInitializing = true;
@@ -374,7 +372,7 @@
       }
     }
 
-    // --- History Control ---
+    // History Control
     function saveHistory() {
       undoStack.push(JSON.parse(JSON.stringify(layers)));
       redoStack = [];
@@ -425,7 +423,7 @@
       }
     });
 
-    // --- Image Load ---
+    // Image Load
     imageLoader.addEventListener('change', (e) => {
       const file = e.target.files[0];
       if (!file) return;
@@ -449,7 +447,7 @@
       reader.readAsDataURL(file);
     });
 
-    // --- Zoom & Pan ---
+    // Zoom & Pan
     function resetZoom() {
       zoomScale = 1.0; panX = 0; panY = 0;
       updateZoomIndicator(); renderAll();
@@ -487,7 +485,6 @@
       return { x, y };
     }
 
-    // 📌 회전각(Rotation) 고려 리사이즈/회전 핸들 계산
     function getResizeHandles(layer, size = 10) {
       const half = size / 2;
       return {
@@ -495,20 +492,18 @@
         tr: { x: layer.x + layer.w - half, y: layer.y - half },
         bl: { x: layer.x - half, y: layer.y + layer.h - half },
         br: { x: layer.x + layer.w - half, y: layer.y + layer.h - half },
-        rot: { x: layer.x + layer.w / 2 - half, y: layer.y - 25 - half } // 회전 상단 핸들
+        rot: { x: layer.x + layer.w / 2 - half, y: layer.y - 30 - half }
       };
     }
 
     function getHitHandle(clickX, clickY, layer, pointerType) {
-      const hitSize = (pointerType === 'pen') ? 12 : (pointerType === 'touch' ? 26 : 16);
+      const hitSize = (pointerType === 'pen') ? 14 : (pointerType === 'touch' ? 28 : 18);
       const visualSize = 10;
       
-      // 회전 변환 적용 좌표 계산
       const cx = layer.x + layer.w / 2;
       const cy = layer.y + layer.h / 2;
       const rad = -(layer.rotation || 0) * (Math.PI / 180);
 
-      // 점(clickX, clickY)을 레이어 중심으로 역회전시켜 판단
       const unrotX = Math.cos(rad) * (clickX - cx) - Math.sin(rad) * (clickY - cy) + cx;
       const unrotY = Math.sin(rad) * (clickX - cx) + Math.cos(rad) * (clickY - cy) + cy;
 
@@ -524,7 +519,7 @@
       return null;
     }
 
-    // --- Pointer Events ---
+    // Pointer Events
     canvas.addEventListener('pointerdown', (e) => {
       if (!originalImage || !e.isPrimary) return;
 
@@ -554,7 +549,6 @@
             initialLayerState = { ...layer, clickX, clickY };
             return;
           } else {
-            // 레이어 내부 클릭 체크 (회전 역연산)
             const cx = layer.x + layer.w / 2;
             const cy = layer.y + layer.h / 2;
             const rad = -(layer.rotation || 0) * (Math.PI / 180);
@@ -587,7 +581,7 @@
       isDraggingSelection = true;
       isFixed = false;
       startX = clickX; startY = clickY;
-      currentSelection = { x: startX, y: startY, w: 0, h: 0 };
+      currentSelection = { x: startX, y: startY, w: 0, h: 0, rotation: 0 };
     });
 
     canvas.addEventListener('pointermove', (e) => {
@@ -605,7 +599,6 @@
 
       if (interactionMode && activeLayer) {
         if (interactionMode === 'rotate') {
-          // 📌 회전각(Angle) 마우스 위치 기반 계산
           const cx = activeLayer.x + activeLayer.w / 2;
           const cy = activeLayer.y + activeLayer.h / 2;
           const radians = Math.atan2(clickY - cy, clickX - cx);
@@ -617,7 +610,7 @@
         } else if (interactionMode === 'move') {
           activeLayer.x = clickX - dragOffsetX;
           activeLayer.y = clickY - dragOffsetY;
-          currentSelection = { x: activeLayer.x, y: activeLayer.y, w: activeLayer.w, h: activeLayer.h };
+          currentSelection = { x: activeLayer.x, y: activeLayer.y, w: activeLayer.w, h: activeLayer.h, rotation: activeLayer.rotation };
         } else if (interactionMode.startsWith('resize-')) {
           const handle = interactionMode.replace('resize-', '');
           const dx = clickX - initialLayerState.clickX;
@@ -643,7 +636,7 @@
           const scale = activeLayer.h / initialLayerState.h;
           activeLayer.size = Math.max(8, Math.round(initialLayerState.size * scale));
           fontSize.value = activeLayer.size;
-          currentSelection = { x: activeLayer.x, y: activeLayer.y, w: activeLayer.w, h: activeLayer.h };
+          currentSelection = { x: activeLayer.x, y: activeLayer.y, w: activeLayer.w, h: activeLayer.h, rotation: activeLayer.rotation };
         }
         renderAll(); return;
       }
@@ -653,6 +646,7 @@
         currentSelection.y = Math.min(startY, clickY);
         currentSelection.w = Math.abs(clickX - startX);
         currentSelection.h = Math.abs(clickY - startY);
+        currentSelection.rotation = 0;
         renderAll();
       }
     });
@@ -682,8 +676,8 @@
       }
     });
 
-    // --- OCR Preprocessing ---
-    function preprocessCanvasForOCR(sourceCanvas, region) {
+    // OCR Preprocessing (원본 픽셀 유지)
+    function preprocessCanvasForOCR(region) {
       const scale = 2;
       const tempCanvas = document.createElement('canvas');
       tempCanvas.width = region.w * scale;
@@ -692,23 +686,24 @@
 
       tempCtx.imageSmoothingEnabled = false;
       tempCtx.drawImage(
-        sourceCanvas, 
+        originalImage, 
         region.x, region.y, region.w, region.h, 
         0, 0, region.w * scale, region.h * scale
       );
 
       const imgData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
       const data = imgData.data;
-      const contrastFactor = 1.6;
+
+      let totalGray = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        totalGray += (0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+      }
+      const avgThreshold = Math.min(Math.max(totalGray / (data.length / 4), 80), 180);
 
       for (let i = 0; i < data.length; i += 4) {
         let gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        gray = ((gray - 128) * contrastFactor) + 128;
-        const val = gray > 128 ? 255 : 0;
-
-        data[i]     = val;
-        data[i + 1] = val;
-        data[i + 2] = val;
+        const val = gray > avgThreshold ? 255 : 0;
+        data[i] = val; data[i + 1] = val; data[i + 2] = val;
       }
 
       tempCtx.putImageData(imgData, 0, 0);
@@ -720,7 +715,7 @@
       ocrStatus.textContent = '⏳ 분석 중...';
       textInput.value = '';
 
-      const processedCanvas = preprocessCanvasForOCR(canvas, region);
+      const processedCanvas = preprocessCanvasForOCR(region);
 
       try {
         if (!globalOcrWorker) await initOCRWorker();
@@ -735,22 +730,31 @@
       }
     }
 
-    // --- Inpainting Algorithm ---
-    function applyEdgeInpainting(ctx, x, y, w, h) {
-      const margin = 4;
-      const leftPx = ctx.getImageData(Math.max(0, x - margin), y + h/2, 1, 1).data;
-      const rightPx = ctx.getImageData(Math.min(canvas.width - 1, x + w + margin), y + h/2, 1, 1).data;
-      const topPx = ctx.getImageData(x + w/2, Math.max(0, y - margin), 1, 1).data;
+    // Edge Inpainting (복원 처리)
+    function applyEdgeInpainting(targetCtx, x, y, w, h) {
+      const tempCanvas = document.createElement('canvas');
+      tempCanvas.width = originalImage.width;
+      tempCanvas.height = originalImage.height;
+      const tempCtx = tempCanvas.getContext('2d');
+      tempCtx.drawImage(originalImage, 0, 0);
 
-      const grad = ctx.createLinearGradient(x, y, x + w, y + h);
+      const margin = 3;
+      const leftPx = tempCtx.getImageData(Math.max(0, x - margin), Math.min(originalImage.height - 1, y + h / 2), 1, 1).data;
+      const rightPx = tempCtx.getImageData(Math.min(originalImage.width - 1, x + w + margin), Math.min(originalImage.height - 1, y + h / 2), 1, 1).data;
+      const topPx = tempCtx.getImageData(Math.min(originalImage.width - 1, x + w / 2), Math.max(0, y - margin), 1, 1).data;
+      const bottomPx = tempCtx.getImageData(Math.min(originalImage.width - 1, x + w / 2), Math.min(originalImage.height - 1, y + h + margin), 1, 1).data;
+
+      const grad = targetCtx.createLinearGradient(x, y, x + w, y + h);
       grad.addColorStop(0, `rgb(${topPx[0]}, ${topPx[1]}, ${topPx[2]})`);
-      grad.addColorStop(0.5, `rgb(${leftPx[0]}, ${leftPx[1]}, ${leftPx[2]})`);
-      grad.addColorStop(1, `rgb(${rightPx[0]}, ${rightPx[1]}, ${rightPx[2]})`);
+      grad.addColorStop(0.35, `rgb(${leftPx[0]}, ${leftPx[1]}, ${leftPx[2]})`);
+      grad.addColorStop(0.7, `rgb(${rightPx[0]}, ${rightPx[1]}, ${rightPx[2]})`);
+      grad.addColorStop(1, `rgb(${bottomPx[0]}, ${bottomPx[1]}, ${bottomPx[2]})`);
 
-      ctx.fillStyle = grad; ctx.fillRect(x, y, w, h);
+      targetCtx.fillStyle = grad;
+      targetCtx.fillRect(x, y, w, h);
     }
 
-    // --- 📌 Main Render Engine with Rotate & Align ---
+    // 📌 Main Render Engine (선택 드래그 중 완전 투명 처리)
     async function renderAll() {
       if (!originalImage) return;
 
@@ -762,7 +766,7 @@
 
       ctx.drawImage(originalImage, 0, 0);
 
-      // Render Committed Layers
+      // 확정된 레이어들 렌더링
       for (const layer of layers) {
         ctx.save();
 
@@ -770,7 +774,6 @@
         const cy = layer.y + layer.h / 2;
         ctx.translate(cx, cy);
 
-        // 회전(Rotation) 적용
         const rad = (layer.rotation || 0) * (Math.PI / 180);
         ctx.rotate(rad);
 
@@ -778,7 +781,7 @@
         const localY = -layer.h / 2;
 
         if (layer.bgMode === 'inpaint') {
-          applyEdgeInpainting(ctx, localX, localY, layer.w, layer.h);
+          applyEdgeInpainting(ctx, layer.x, layer.y, layer.w, layer.h);
         } else {
           ctx.fillStyle = layer.bgColor;
           ctx.fillRect(localX, localY, layer.w, layer.h);
@@ -789,38 +792,28 @@
         ctx.fillStyle = layer.color;
         ctx.textBaseline = 'top';
 
-        // 📌 텍스트 정렬(TextAlign) 축 연산
         let textX = localX + 4;
-        if (layer.align === 'center') {
-          ctx.textAlign = 'center';
-          textX = 0;
-        } else if (layer.align === 'right') {
-          ctx.textAlign = 'right';
-          textX = localX + layer.w - 4;
-        } else {
-          ctx.textAlign = 'left';
-        }
+        if (layer.align === 'center') { ctx.textAlign = 'center'; textX = 0; }
+        else if (layer.align === 'right') { ctx.textAlign = 'right'; textX = localX + layer.w - 4; }
+        else { ctx.textAlign = 'left'; }
 
         ctx.fillText(layer.text, textX, localY + 4);
 
-        // Active Layer Highlight & Rotate/Resize Controls
         if (layer.id === activeLayerId) {
           ctx.strokeStyle = '#10b981'; ctx.lineWidth = 2 / zoomScale; ctx.setLineDash([]);
           ctx.strokeRect(localX, localY, layer.w, layer.h);
 
-          // 회전 연결선 및 상단 핸들 드로잉
-          const rotY = localY - 25 / zoomScale;
+          const rotY = localY - 30 / zoomScale;
           ctx.beginPath();
           ctx.moveTo(0, localY);
           ctx.lineTo(0, rotY);
-          ctx.strokeStyle = '#10b981';
+          ctx.strokeStyle = '#3b82f6';
           ctx.stroke();
 
           ctx.beginPath();
-          ctx.arc(0, rotY, 6 / zoomScale, 0, Math.PI * 2);
+          ctx.arc(0, rotY, 7 / zoomScale, 0, Math.PI * 2);
           ctx.fillStyle = '#3b82f6'; ctx.fill(); ctx.stroke();
 
-          // 4개 모서리 핸들
           const handles = getResizeHandles({ x: localX, y: localY, w: layer.w, h: layer.h }, 10 / zoomScale);
           ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#10b981';
           ['tl', 'tr', 'bl', 'br'].forEach(key => {
@@ -833,33 +826,39 @@
         ctx.restore();
       }
 
-      // Draw Uncommitted Selection Box
+      // 📌 미확정 선택 박스 (드래그 중에는 완전 투명 처리하여 원본 글씨가 뚜렷하게 보이도록 함)
       if (currentSelection && !activeLayerId) {
         const { x, y, w, h } = currentSelection;
-        if (bgFillMode.value === 'inpaint') applyEdgeInpainting(ctx, x, y, w, h);
-        else { ctx.fillStyle = bgColorPicker.value; ctx.fillRect(x, y, w, h); }
+        
+        // 고정(isFixed) 상태가 된 경우에만 배경 덮기 & 새 텍스트 프리뷰 렌더링
+        if (isFixed) {
+          if (bgFillMode.value === 'inpaint') applyEdgeInpainting(ctx, x, y, w, h);
+          else { ctx.fillStyle = bgColorPicker.value; ctx.fillRect(x, y, w, h); }
 
-        const font = fontFamily.value, size = parseInt(fontSize.value, 10), bold = isBold.checked ? 'bold ' : '';
-        await document.fonts.load(`${bold}${size}px "${font}"`);
-        ctx.font = `${bold}${size}px "${font}"`; ctx.fillStyle = textColor.value;
-        ctx.textBaseline = 'top';
+          const font = fontFamily.value, size = parseInt(fontSize.value, 10), bold = isBold.checked ? 'bold ' : '';
+          await document.fonts.load(`${bold}${size}px "${font}"`);
+          ctx.font = `${bold}${size}px "${font}"`; ctx.fillStyle = textColor.value;
+          ctx.textBaseline = 'top';
 
-        let textX = x + 4;
-        if (textAlign.value === 'center') { ctx.textAlign = 'center'; textX = x + w / 2; }
-        else if (textAlign.value === 'right') { ctx.textAlign = 'right'; textX = x + w - 4; }
-        else { ctx.textAlign = 'left'; }
+          let textX = x + 4;
+          if (textAlign.value === 'center') { ctx.textAlign = 'center'; textX = x + w / 2; }
+          else if (textAlign.value === 'right') { ctx.textAlign = 'right'; textX = x + w - 4; }
+          else { ctx.textAlign = 'left'; }
 
-        ctx.fillText(textInput.value, textX, y + 4);
+          ctx.fillText(textInput.value, textX, y + 4);
+        }
 
-        ctx.strokeStyle = isFixed ? '#3b82f6' : '#f59e0b';
-        ctx.lineWidth = 2 / zoomScale; ctx.setLineDash(isFixed ? [] : [6 / zoomScale, 6 / zoomScale]);
+        // 선택 영역 테두리 (드래그 중에는 원본 텍스트가 가려지지 않는 파란/주황 점선)
+        ctx.strokeStyle = isFixed ? '#3b82f6' : '#38bdf8';
+        ctx.lineWidth = 2 / zoomScale; 
+        ctx.setLineDash(isFixed ? [] : [6 / zoomScale, 6 / zoomScale]);
         ctx.strokeRect(x, y, w, h);
       }
 
       ctx.restore();
     }
 
-    // --- Layer Controls & Property Bindings ---
+    // Property Events
     applyLayerBtn.addEventListener('click', () => {
       if (!currentSelection) return;
       saveHistory();
@@ -976,7 +975,7 @@
         const localY = -layer.h / 2;
 
         if (layer.bgMode === 'inpaint') {
-          applyEdgeInpainting(exportCtx, localX, localY, layer.w, layer.h);
+          applyEdgeInpainting(exportCtx, layer.x, layer.y, layer.w, layer.h);
         } else {
           exportCtx.fillStyle = layer.bgColor;
           exportCtx.fillRect(localX, localY, layer.w, layer.h);
